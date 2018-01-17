@@ -1,4 +1,5 @@
 require 'active_support/concern'
+RAILS_GTE_5_1 = ::ActiveRecord.gem_version >= ::Gem::Version.new("5.1.0.beta1")
 
 module CustomCounterCache::Model
   extend ActiveSupport::Concern
@@ -50,13 +51,20 @@ module CustomCounterCache::Model
       reflection   = reflect_on_association(association)
       foreign_key  = reflection.try(:foreign_key) || reflection.association_foreign_key
 
+
+      changed_method_name = if RAILS_GTE_5_1
+        'saved_change_to_attribute?'
+      else
+        'attributed_changed?'
+      end
+
       # define callback
       define_method method_name do
         # update old association
-        if send("#{foreign_key}_changed?") || ( reflection.options[:polymorphic] && send("#{association}_type_changed?") )
-          old_id = send("#{foreign_key}_was")
+        if send(changed_method_name, foreign_key) || ( reflection.options[:polymorphic] && send(changed_method_name, "#{association}_type") )
+          old_id = send("attribute_before_last_save", foreign_key)
           klass = if reflection.options[:polymorphic]
-            ( send("#{association}_type_was") || send("#{association}_type") ).constantize
+            ( send("attribute_before_last_save", "#{association}_type") || send("#{association}_type") ).constantize
           else
             reflection.klass
           end
